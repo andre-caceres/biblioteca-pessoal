@@ -1,0 +1,620 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Minha Biblioteca</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;500;700&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet"/>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --ink:#1a1814;--paper:#faf8f3;--cream:#f0ebe0;--gold:#c9983a;--gold-light:#f5e6c0;
+  --border:#d8d0be;--muted:#7a7060;--danger:#c0392b;--success:#2d6a4f;
+  --fd:'Playfair Display',serif;--fb:'DM Sans',sans-serif;
+}
+body{font-family:var(--fb);background:var(--paper);color:var(--ink);min-height:100vh}
+
+.header{border-bottom:1px solid var(--border);padding:1.1rem 1.5rem;display:flex;align-items:center;justify-content:space-between;background:var(--paper);position:sticky;top:0;z-index:10}
+.header h1{font-family:var(--fd);font-size:22px;font-weight:700;letter-spacing:-0.5px}
+.sync-status{font-size:12px;color:var(--muted);display:flex;align-items:center;gap:5px}
+.sync-dot{width:7px;height:7px;border-radius:50%;background:#bbb;flex-shrink:0;transition:background .3s}
+.sync-dot.ok{background:#2d6a4f}
+.sync-dot.err{background:var(--danger)}
+.sync-dot.spin{background:var(--gold);animation:pulse 1s infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
+
+.container{display:grid;grid-template-columns:300px 1fr;min-height:calc(100vh - 57px)}
+.sidebar{border-right:1px solid var(--border);padding:1.25rem;background:var(--cream);overflow-y:auto;max-height:calc(100vh - 57px)}
+.sidebar h2{font-family:var(--fd);font-size:16px;font-weight:600;margin-bottom:1rem}
+.main{padding:1.25rem;overflow-y:auto;max-height:calc(100vh - 57px)}
+
+label{display:block;font-size:11px;font-weight:500;color:var(--muted);letter-spacing:.06em;text-transform:uppercase;margin-bottom:4px;margin-top:14px}
+input[type=text]{width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:6px;font-family:var(--fb);font-size:14px;background:var(--paper);color:var(--ink);outline:none;transition:border .15s;-webkit-appearance:none}
+input[type=text]:focus{border-color:var(--gold)}
+.hint{font-size:11px;color:var(--muted);margin-top:4px}
+
+.tags-wrap{display:flex;flex-wrap:wrap;gap:4px;padding:6px;border:1px solid var(--border);border-radius:6px;background:var(--paper);min-height:38px;cursor:text}
+.tags-wrap:focus-within{border-color:var(--gold)}
+.tag-pill{background:var(--gold-light);color:#7a5c1a;font-size:12px;padding:2px 8px;border-radius:20px;display:flex;align-items:center;gap:4px}
+.tag-pill button{background:none;border:none;cursor:pointer;color:#7a5c1a;font-size:13px;line-height:1;padding:0}
+.tag-input-inner{border:none;outline:none;font-size:13px;font-family:var(--fb);background:transparent;min-width:80px;color:var(--ink)}
+.preset-tags{display:flex;flex-wrap:wrap;gap:4px;margin-top:6px}
+.preset-tag{padding:2px 8px;border:1px solid var(--border);border-radius:20px;font-size:11px;cursor:pointer;background:var(--paper);color:var(--muted);transition:all .15s}
+.preset-tag:hover{border-color:var(--gold);color:var(--ink)}
+
+.btn-primary{width:100%;margin-top:16px;padding:10px;border:none;border-radius:6px;background:var(--ink);color:var(--paper);font-family:var(--fb);font-size:14px;font-weight:500;cursor:pointer;transition:opacity .15s}
+.btn-primary:hover{opacity:.82}
+.btn-primary:disabled{opacity:.45;cursor:not-allowed}
+.msg{font-size:13px;padding:8px 10px;border-radius:6px;margin-top:8px;display:none}
+.msg.success{background:#d4edda;color:var(--success);display:block}
+.msg.error{background:#fde8e8;color:var(--danger);display:block}
+
+.toolbar{display:flex;gap:8px;align-items:center;margin-bottom:1rem;flex-wrap:wrap}
+.search-wrap{position:relative;flex:1;min-width:160px}
+.search-wrap input{padding-left:32px}
+.search-icon{position:absolute;left:10px;top:50%;transform:translateY(-50%);font-size:14px;color:var(--muted);pointer-events:none}
+.btn-outline{padding:8px 12px;border:1px solid var(--border);border-radius:6px;background:transparent;cursor:pointer;font-size:13px;font-family:var(--fb);color:var(--ink);transition:all .15s;white-space:nowrap}
+.btn-outline:hover{background:var(--cream)}
+
+.tag-filter-section{margin-bottom:1rem}
+.tag-filter-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:6px}
+.tag-filter-label{font-size:11px;font-weight:500;color:var(--muted);letter-spacing:.06em;text-transform:uppercase}
+.btn-clear-tags{font-size:12px;color:var(--gold);cursor:pointer;background:none;border:none;font-family:var(--fb);padding:0;display:none}
+.btn-clear-tags:hover{text-decoration:underline}
+.tag-cloud{display:flex;flex-wrap:wrap;gap:5px}
+.tag-cloud-item{padding:3px 10px;border:1px solid var(--border);border-radius:20px;font-size:12px;cursor:pointer;background:var(--paper);color:var(--muted);transition:all .15s;font-family:var(--fb)}
+.tag-cloud-item:hover{border-color:var(--gold);color:var(--ink)}
+.tag-cloud-item.active{background:var(--ink);color:var(--paper);border-color:var(--ink)}
+.tag-cloud-empty{font-size:13px;color:var(--muted);font-style:italic}
+
+.stats{display:flex;gap:1rem;margin-bottom:.75rem;padding:10px 14px;background:var(--cream);border-radius:8px;border:1px solid var(--border);flex-wrap:wrap}
+.stat{font-size:13px;color:var(--muted)}
+.stat strong{color:var(--ink);font-weight:500}
+.active-filters{font-size:12px;color:var(--muted);margin-bottom:.75rem;min-height:16px}
+.active-filters b{color:var(--ink);font-weight:500}
+
+.book-list{display:flex;flex-direction:column;gap:8px}
+.book-card{background:var(--paper);border:1px solid var(--border);border-radius:8px;padding:12px 14px;display:grid;grid-template-columns:1fr auto;gap:8px;align-items:start;transition:border .15s}
+.book-card:hover{border-color:var(--gold)}
+.book-title{font-family:var(--fd);font-size:16px;font-weight:500;line-height:1.3}
+.book-meta{font-size:13px;color:var(--muted);margin-top:2px}
+.book-tags{display:flex;flex-wrap:wrap;gap:4px;margin-top:6px}
+.book-tag{background:var(--gold-light);color:#7a5c1a;font-size:11px;padding:1px 7px;border-radius:20px;cursor:pointer;border:1px solid transparent;transition:all .15s}
+.book-tag:hover{opacity:.75}
+.book-tag.active{outline:2px solid var(--gold);outline-offset:1px}
+.btn-sm{padding:4px 10px;border:1px solid var(--border);border-radius:5px;background:transparent;font-size:12px;cursor:pointer;font-family:var(--fb);transition:all .15s;white-space:nowrap}
+.btn-sm.del:hover{background:#fde8e8;border-color:#e99;color:var(--danger)}
+.empty{text-align:center;padding:3rem 1rem;color:var(--muted)}
+.empty-icon{font-size:40px;margin-bottom:8px}
+.empty p{font-size:14px}
+
+.modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:100;display:none;align-items:center;justify-content:center;padding:1rem}
+.modal-overlay.open{display:flex}
+.modal{background:var(--paper);border:1px solid var(--border);border-radius:10px;padding:1.5rem;width:100%;max-width:520px;max-height:82vh;overflow-y:auto}
+.modal h2{font-family:var(--fd);font-size:20px;font-weight:600;margin-bottom:4px}
+.modal-sub{font-size:13px;color:var(--muted);margin-bottom:1rem}
+.import-table{width:100%;border-collapse:collapse;font-size:13px}
+.import-table th{text-align:left;padding:6px 8px;background:var(--cream);border:1px solid var(--border);font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted)}
+.import-table td{padding:6px 8px;border:1px solid var(--border);max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.import-table tr.dup td{background:#fef9ec;color:#8a6d00}
+.import-table tr.err td{background:#fde8e8;color:var(--danger)}
+.import-summary{font-size:13px;padding:8px 10px;border-radius:6px;background:var(--cream);border:1px solid var(--border);margin-bottom:1rem}
+.modal-actions{display:flex;gap:8px;justify-content:flex-end;margin-top:1rem}
+.btn-cancel{padding:8px 16px;border:1px solid var(--border);border-radius:6px;background:transparent;font-family:var(--fb);font-size:14px;cursor:pointer}
+.btn-cancel:hover{background:var(--cream)}
+.btn-confirm{padding:8px 20px;border:none;border-radius:6px;background:var(--ink);color:var(--paper);font-family:var(--fb);font-size:14px;font-weight:500;cursor:pointer}
+.btn-confirm:hover{opacity:.82}
+.btn-confirm:disabled{opacity:.45;cursor:not-allowed}
+.legend{display:flex;gap:12px;font-size:11px;color:var(--muted);margin-bottom:8px;flex-wrap:wrap}
+.legend span{display:flex;align-items:center;gap:4px}
+.leg-dot{width:10px;height:10px;border-radius:2px}
+
+@media(max-width:680px){
+  .container{grid-template-columns:1fr}
+  .sidebar{border-right:none;border-bottom:1px solid var(--border);max-height:none}
+  .main{max-height:none}
+  .header h1{font-size:18px}
+}
+</style>
+</head>
+<body>
+
+<header class="header">
+  <h1>Minha Biblioteca</h1>
+  <div class="sync-status">
+    <div class="sync-dot" id="sync-dot"></div>
+    <span id="sync-label">conectando...</span>
+  </div>
+</header>
+
+<div class="container">
+
+  <aside class="sidebar">
+    <h2>Adicionar livro</h2>
+    <label>Título *</label>
+    <input type="text" id="m-title" placeholder="Ex: Dom Quixote"/>
+    <label>Autoria</label>
+    <input type="text" id="m-author" placeholder="Ex: Miguel de Cervantes"/>
+    <label>Editora</label>
+    <input type="text" id="m-publisher" placeholder="Ex: Companhia das Letras"/>
+    <label>Idioma</label>
+    <input type="text" id="m-lang" placeholder="Ex: Português"/>
+    <label>Tags</label>
+    <div class="tags-wrap" id="form-tags-wrap" onclick="focusTagInput()">
+      <input class="tag-input-inner" id="form-tag-input" placeholder="escreva e pressione Enter..."/>
+    </div>
+    <p class="hint">Ou clique nas sugestões abaixo</p>
+    <div class="preset-tags" id="form-presets"></div>
+    <div id="form-msg" class="msg"></div>
+    <button class="btn-primary" id="save-btn" onclick="saveBook()">Adicionar à biblioteca</button>
+  </aside>
+
+  <main class="main">
+    <div class="toolbar">
+      <div class="search-wrap">
+        <span class="search-icon">&#128269;</span>
+        <input type="text" id="search-input" placeholder="Buscar título, autor, editora..." oninput="renderList()"/>
+      </div>
+      <button class="btn-outline" onclick="document.getElementById('csv-file').click()">&#8593; Importar</button>
+      <input type="file" id="csv-file" accept=".csv" style="display:none" onchange="importCSV(event)"/>
+      <button class="btn-outline" onclick="exportCSV()">&#8595; Exportar</button>
+    </div>
+
+    <div class="tag-filter-section">
+      <div class="tag-filter-header">
+        <span class="tag-filter-label">Filtrar por tags</span>
+        <button class="btn-clear-tags" id="btn-clear-tags" onclick="clearTagFilter()">Limpar filtros</button>
+      </div>
+      <div class="tag-cloud" id="tag-cloud">
+        <span class="tag-cloud-empty">Nenhuma tag cadastrada ainda.</span>
+      </div>
+    </div>
+
+    <div class="stats">
+      <div class="stat">Total: <strong id="s-total">–</strong></div>
+      <div class="stat">Exibindo: <strong id="s-showing">–</strong></div>
+      <div class="stat">Tags: <strong id="s-tags">–</strong></div>
+    </div>
+    <div class="active-filters" id="active-filters"></div>
+
+    <div class="book-list" id="book-list">
+      <div class="empty"><div class="empty-icon">&#128214;</div><p>Conectando à biblioteca...</p></div>
+    </div>
+  </main>
+</div>
+
+<div class="modal-overlay" id="import-modal">
+  <div class="modal">
+    <h2>Importar CSV</h2>
+    <p class="modal-sub">Prévia dos livros encontrados. Revise antes de confirmar.</p>
+    <div class="legend">
+      <span><span class="leg-dot" style="background:var(--cream);border:1px solid var(--border)"></span>Novo</span>
+      <span><span class="leg-dot" style="background:#fef9ec;border:1px solid #d4b800"></span>Duplicado (ignorado)</span>
+      <span><span class="leg-dot" style="background:#fde8e8;border:1px solid #e99"></span>Sem título (ignorado)</span>
+    </div>
+    <div class="import-summary" id="import-summary"></div>
+    <div style="overflow-x:auto">
+      <table class="import-table">
+        <thead><tr><th>Título</th><th>Autor</th><th>Tags</th><th>Status</th></tr></thead>
+        <tbody id="import-tbody"></tbody>
+      </table>
+    </div>
+    <div class="modal-actions">
+      <button class="btn-cancel" onclick="closeImportModal()">Cancelar</button>
+      <button class="btn-confirm" id="import-confirm-btn" onclick="confirmImport()">Importar</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// FIREBASE
+var firebaseConfig = {
+  apiKey: "AIzaSyAJnbPRVbQWISkis142QjAJGmfAukw6kKM",
+  authDomain: "biblioteca-pessoal-ce580.firebaseapp.com",
+  projectId: "biblioteca-pessoal-ce580",
+  storageBucket: "biblioteca-pessoal-ce580.firebasestorage.app",
+  messagingSenderId: "1013034577507",
+  appId: "1:1013034577507:web:509c641ae1682d0d831256"
+};
+firebase.initializeApp(firebaseConfig);
+var db = firebase.firestore();
+var col = db.collection('books');
+
+// STATE
+var books = [];
+var activeTags = [];
+var importQueue = [];
+var PRESETS = ['ficção','não ficção','poesia','conto','crônica','romance'];
+
+// FIRESTORE
+col.orderBy('createdAt','desc').onSnapshot(function(snap) {
+  books = snap.docs.map(function(d) {
+    return Object.assign({ id: d.id }, d.data());
+  });
+  setSyncOk();
+  buildTagCloud();
+  renderList();
+  updateStats();
+}, function(err) {
+  console.error(err);
+  setSyncErr();
+});
+
+function addBook(data) {
+  data.createdAt = Date.now();
+  return col.add(data);
+}
+function removeBook(id) {
+  return col.doc(id).delete();
+}
+
+// SYNC
+function setSyncOk()      { setSync('ok',   'sincronizado'); }
+function setSyncErr()     { setSync('err',  'erro de conexão'); }
+function setSyncLoading() { setSync('spin', 'salvando...'); }
+function setSync(cls, txt) {
+  document.getElementById('sync-dot').className = 'sync-dot ' + cls;
+  document.getElementById('sync-label').textContent = txt;
+}
+
+// TAG INPUT
+function focusTagInput() {
+  document.getElementById('form-tag-input').focus();
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+  var input = document.getElementById('form-tag-input');
+  input.addEventListener('keydown', function(e) {
+    if (e.key === 'Enter' || e.key === ',') {
+      e.preventDefault();
+      var v = input.value.trim().replace(/,/g, '');
+      if (v) addTagPill(v);
+      input.value = '';
+    } else if (e.key === 'Backspace' && !input.value) {
+      var pills = document.querySelectorAll('#form-tags-wrap .tag-pill');
+      if (pills.length) pills[pills.length - 1].remove();
+    }
+  });
+  buildPresets();
+});
+
+function addTagPill(tag) {
+  var wrap = document.getElementById('form-tags-wrap');
+  var input = document.getElementById('form-tag-input');
+  var already = Array.from(wrap.querySelectorAll('.tag-pill')).some(function(p) {
+    return p.dataset.tag === tag;
+  });
+  if (already) return;
+  var pill = document.createElement('span');
+  pill.className = 'tag-pill';
+  pill.dataset.tag = tag;
+  var btn = document.createElement('button');
+  btn.type = 'button';
+  btn.innerHTML = '&times;';
+  btn.onclick = function() { pill.remove(); };
+  pill.appendChild(document.createTextNode(tag + ' '));
+  pill.appendChild(btn);
+  wrap.insertBefore(pill, input);
+}
+
+function getFormTags() {
+  return Array.from(document.querySelectorAll('#form-tags-wrap .tag-pill')).map(function(p) {
+    return p.dataset.tag;
+  });
+}
+
+function clearFormTags() {
+  document.querySelectorAll('#form-tags-wrap .tag-pill').forEach(function(p) { p.remove(); });
+  document.getElementById('form-tag-input').value = '';
+}
+
+function buildPresets() {
+  var c = document.getElementById('form-presets');
+  c.innerHTML = '';
+  PRESETS.forEach(function(t) {
+    var b = document.createElement('button');
+    b.className = 'preset-tag';
+    b.textContent = t;
+    b.onclick = function() { addTagPill(t); };
+    c.appendChild(b);
+  });
+}
+
+// SAVE
+function saveBook() {
+  var title = document.getElementById('m-title').value.trim();
+  if (!title) { showMsg('form-msg', 'O título é obrigatório.', 'error'); return; }
+  var btn = document.getElementById('save-btn');
+  btn.disabled = true;
+  setSyncLoading();
+  addBook({
+    title:     title,
+    author:    document.getElementById('m-author').value.trim(),
+    publisher: document.getElementById('m-publisher').value.trim(),
+    lang:      document.getElementById('m-lang').value.trim(),
+    tags:      getFormTags()
+  }).then(function() {
+    ['m-title','m-author','m-publisher','m-lang'].forEach(function(id) {
+      document.getElementById(id).value = '';
+    });
+    clearFormTags();
+    showMsg('form-msg', '"' + title + '" adicionado!', 'success');
+    setTimeout(function() { showMsg('form-msg', '', ''); }, 3000);
+  }).catch(function() {
+    showMsg('form-msg', 'Erro ao salvar. Tente novamente.', 'error');
+    setSyncErr();
+  }).finally(function() {
+    btn.disabled = false;
+  });
+}
+
+// TAG CLOUD / FILTER
+function buildTagCloud() {
+  var allTags = getAllTags();
+  var cloud = document.getElementById('tag-cloud');
+  cloud.innerHTML = '';
+
+  if (!allTags.length) {
+    cloud.innerHTML = '<span class="tag-cloud-empty">Nenhuma tag cadastrada ainda.</span>';
+    return;
+  }
+
+  // remove activeTags que sumiram
+  activeTags = activeTags.filter(function(t) { return allTags.indexOf(t) >= 0; });
+
+  allTags.forEach(function(t) {
+    var btn = document.createElement('button');
+    btn.className = 'tag-cloud-item' + (activeTags.indexOf(t) >= 0 ? ' active' : '');
+    btn.textContent = t;
+    btn.onclick = function() { toggleTagFilter(t); };
+    cloud.appendChild(btn);
+  });
+
+  updateClearBtn();
+}
+
+function toggleTagFilter(tag) {
+  var i = activeTags.indexOf(tag);
+  if (i >= 0) activeTags.splice(i, 1);
+  else activeTags.push(tag);
+  buildTagCloud();
+  renderList();
+  updateStats();
+  renderActiveFilters();
+}
+
+function clearTagFilter() {
+  activeTags = [];
+  buildTagCloud();
+  renderList();
+  updateStats();
+  renderActiveFilters();
+}
+
+function updateClearBtn() {
+  document.getElementById('btn-clear-tags').style.display = activeTags.length ? 'inline' : 'none';
+}
+
+function renderActiveFilters() {
+  var el = document.getElementById('active-filters');
+  if (!activeTags.length) { el.innerHTML = ''; return; }
+  el.innerHTML = 'Filtrando por: ' + activeTags.map(function(t) {
+    return '<b>' + esc(t) + '</b>';
+  }).join(' + ');
+}
+
+// LIST
+function renderList() {
+  var q = document.getElementById('search-input').value.toLowerCase();
+  var filtered = books.filter(function(b) {
+    var text = [b.title, b.author, b.publisher, b.lang].join(' ').toLowerCase();
+    var matchQ = !q || text.indexOf(q) >= 0;
+    var matchT = activeTags.every(function(t) {
+      return (b.tags || []).indexOf(t) >= 0;
+    });
+    return matchQ && matchT;
+  });
+
+  document.getElementById('s-showing').textContent = filtered.length;
+  var list = document.getElementById('book-list');
+
+  if (!filtered.length) {
+    var msg = books.length
+      ? 'Nenhum livro encontrado para esta busca.'
+      : 'Sua biblioteca está vazia. Adicione o primeiro volume!';
+    list.innerHTML = '<div class="empty"><div class="empty-icon">&#128214;</div><p>' + msg + '</p></div>';
+    return;
+  }
+
+  list.innerHTML = filtered.map(function(b) {
+    var meta = [b.author, b.publisher, b.lang].filter(Boolean).join(' · ');
+    var tagHtml = (b.tags || []).map(function(t) {
+      var isActive = activeTags.indexOf(t) >= 0;
+      return '<span class="book-tag' + (isActive ? ' active' : '') + '" onclick="toggleTagFilter(\'' + esc(t) + '\')">' + esc(t) + '</span>';
+    }).join('');
+    return '<div class="book-card">' +
+      '<div>' +
+        '<div class="book-title">' + esc(b.title) + '</div>' +
+        (meta ? '<div class="book-meta">' + esc(meta) + '</div>' : '') +
+        (tagHtml ? '<div class="book-tags">' + tagHtml + '</div>' : '') +
+      '</div>' +
+      '<div><button class="btn-sm del" onclick="deleteBook(\'' + b.id + '\')">Remover</button></div>' +
+    '</div>';
+  }).join('');
+}
+
+function deleteBook(id) {
+  if (!confirm('Remover este livro da biblioteca?')) return;
+  removeBook(id).catch(function() { alert('Erro ao remover.'); });
+}
+
+function updateStats() {
+  var allTags = getAllTags();
+  document.getElementById('s-total').textContent = books.length;
+  document.getElementById('s-tags').textContent  = allTags.length;
+}
+
+function getAllTags() {
+  var set = {};
+  books.forEach(function(b) {
+    (b.tags || []).forEach(function(t) { set[t] = true; });
+  });
+  return Object.keys(set).sort();
+}
+
+// EXPORT
+function exportCSV() {
+  if (!books.length) { alert('Nenhum livro para exportar.'); return; }
+  var bom = '\uFEFF';
+  var cols = ['Título','Autoria','Editora','Idioma','Tags'];
+  var rows = books.map(function(b) {
+    return [b.title, b.author, b.publisher, b.lang, (b.tags || []).join('; ')]
+      .map(function(v) { return '"' + String(v || '').replace(/"/g, '""') + '"'; });
+  });
+  var csv = bom + [cols.map(function(h) { return '"' + h + '"'; }).join(',')]
+    .concat(rows.map(function(r) { return r.join(','); })).join('\n');
+  var a = document.createElement('a');
+  a.href = 'data:text/csv;charset=utf-8,' + encodeURIComponent(csv);
+  a.download = 'minha_biblioteca.csv';
+  a.click();
+}
+
+// IMPORT
+function importCSV(event) {
+  var file = event.target.files[0];
+  if (!file) return;
+  event.target.value = '';
+  var reader = new FileReader();
+  reader.onload = function(e) { parseAndPreview(e.target.result); };
+  reader.readAsText(file, 'UTF-8');
+}
+
+function parseAndPreview(text) {
+  var clean = text.replace(/^\uFEFF/, '');
+  var lines = clean.split(/\r?\n/).filter(function(l) { return l.trim(); });
+  if (lines.length < 2) { alert('Arquivo vazio ou sem dados.'); return; }
+
+  var header = parseCSVLine(lines[0]).map(function(h) { return h.toLowerCase().trim(); });
+  var idx = {
+    title:     findCol(header, ['título','titulo','title']),
+    author:    findCol(header, ['autoria','autor','author']),
+    publisher: findCol(header, ['editora','publisher']),
+    lang:      findCol(header, ['idioma','lang']),
+    tags:      findCol(header, ['tags'])
+  };
+
+  var existingTitles = {};
+  books.forEach(function(b) { existingTitles[b.title.toLowerCase().trim()] = true; });
+
+  importQueue = [];
+  var tbody = document.getElementById('import-tbody');
+  tbody.innerHTML = '';
+  var nNew = 0, nDup = 0, nErr = 0;
+
+  for (var i = 1; i < lines.length; i++) {
+    var cols = parseCSVLine(lines[i]);
+    var get = function(k) { return idx[k] >= 0 ? (cols[idx[k]] || '').trim() : ''; };
+    var title  = get('title');
+    var author = get('author');
+    var tagsRaw = get('tags');
+    var tags = tagsRaw ? tagsRaw.split(';').map(function(t) { return t.trim(); }).filter(Boolean) : [];
+
+    var status, cls;
+    if (!title) {
+      status = 'Sem título'; cls = 'err'; nErr++;
+    } else if (existingTitles[title.toLowerCase()]) {
+      status = 'Duplicado'; cls = 'dup'; nDup++;
+    } else {
+      status = 'Novo'; cls = ''; nNew++;
+      importQueue.push({ title: title, author: author, publisher: get('publisher'), lang: get('lang'), tags: tags });
+    }
+
+    var tr = document.createElement('tr');
+    if (cls) tr.className = cls;
+    tr.innerHTML =
+      '<td title="' + esc(title) + '">' + esc(title || '—') + '</td>' +
+      '<td title="' + esc(author) + '">' + esc(author || '—') + '</td>' +
+      '<td>' + (tags.map(function(t) { return '<span class="book-tag">' + esc(t) + '</span>'; }).join(' ') || '—') + '</td>' +
+      '<td>' + status + '</td>';
+    tbody.appendChild(tr);
+  }
+
+  document.getElementById('import-summary').textContent =
+    (lines.length - 1) + ' linha(s) · ' + nNew + ' novo(s) · ' + nDup + ' duplicado(s) · ' + nErr + ' sem título';
+  var btn = document.getElementById('import-confirm-btn');
+  btn.disabled = nNew === 0;
+  btn.textContent = nNew > 0 ? 'Importar ' + nNew + ' livro(s)' : 'Nenhum para importar';
+  document.getElementById('import-modal').classList.add('open');
+}
+
+function confirmImport() {
+  if (!importQueue.length) return;
+  var btn = document.getElementById('import-confirm-btn');
+  btn.disabled = true;
+  btn.textContent = 'Salvando...';
+  setSyncLoading();
+  var chain = Promise.resolve();
+  importQueue.forEach(function(book) {
+    chain = chain.then(function() { return addBook(book); });
+  });
+  chain.then(function() {
+    closeImportModal();
+  }).catch(function() {
+    alert('Erro ao importar. Verifique sua conexão.');
+    setSyncErr();
+    btn.disabled = false;
+    btn.textContent = 'Importar ' + importQueue.length + ' livro(s)';
+  });
+}
+
+function closeImportModal() {
+  document.getElementById('import-modal').classList.remove('open');
+  importQueue = [];
+}
+
+function findCol(header, candidates) {
+  for (var i = 0; i < candidates.length; i++) {
+    var j = header.indexOf(candidates[i]);
+    if (j >= 0) return j;
+  }
+  return -1;
+}
+
+function parseCSVLine(line) {
+  var result = [], cur = '', inQ = false;
+  for (var i = 0; i < line.length; i++) {
+    var ch = line[i];
+    if (ch === '"') {
+      if (inQ && line[i + 1] === '"') { cur += '"'; i++; }
+      else inQ = !inQ;
+    } else if (ch === ',' && !inQ) {
+      result.push(cur); cur = '';
+    } else {
+      cur += ch;
+    }
+  }
+  result.push(cur);
+  return result;
+}
+
+function showMsg(id, text, type) {
+  var el = document.getElementById(id);
+  el.textContent = text;
+  el.className = 'msg' + (type ? ' ' + type : '');
+  el.style.display = text ? 'block' : 'none';
+}
+
+function esc(s) {
+  return String(s || '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+</script>
+</body>
+</html>
