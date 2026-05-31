@@ -82,7 +82,7 @@ input[type=text]:focus{border-color:var(--gold)}
 .book-title{font-family:var(--fd);font-size:16px;font-weight:500;line-height:1.3}
 .book-meta{font-size:13px;color:var(--muted);margin-top:2px}
 .book-tags{display:flex;flex-wrap:wrap;gap:4px;margin-top:6px}
-.book-tag{background:var(--gold-light);color:#7a5c1a;font-size:11px;padding:1px 7px;border-radius:20px;cursor:pointer;border:1px solid transparent;transition:all .15s}
+.book-tag{background:var(--gold-light);color:#7a5c1a;font-size:11px;padding:1px 7px;border-radius:20px;cursor:pointer;transition:all .15s;border:1px solid transparent}
 .book-tag:hover{opacity:.75}
 .book-tag.active{outline:2px solid var(--gold);outline-offset:1px}
 .btn-sm{padding:4px 10px;border:1px solid var(--border);border-radius:5px;background:transparent;font-size:12px;cursor:pointer;font-family:var(--fb);transition:all .15s;white-space:nowrap}
@@ -111,6 +111,10 @@ input[type=text]:focus{border-color:var(--gold)}
 .legend{display:flex;gap:12px;font-size:11px;color:var(--muted);margin-bottom:8px;flex-wrap:wrap}
 .legend span{display:flex;align-items:center;gap:4px}
 .leg-dot{width:10px;height:10px;border-radius:2px}
+.edit-modal-body label{margin-top:12px}
+.edit-modal-body label:first-of-type{margin-top:0}
+.btn-sm.edit:hover{background:#e8f0fe;border-color:#a0b4e8;color:#1a3a8a}
+
 
 @media(max-width:680px){
   .container{grid-template-columns:1fr}
@@ -131,7 +135,6 @@ input[type=text]:focus{border-color:var(--gold)}
 </header>
 
 <div class="container">
-
   <aside class="sidebar">
     <h2>Adicionar livro</h2>
     <label>Título *</label>
@@ -143,7 +146,7 @@ input[type=text]:focus{border-color:var(--gold)}
     <label>Idioma</label>
     <input type="text" id="m-lang" placeholder="Ex: Português"/>
     <label>Tags</label>
-    <div class="tags-wrap" id="form-tags-wrap" onclick="focusTagInput()">
+    <div class="tags-wrap" id="form-tags-wrap" onclick="document.getElementById('form-tag-input').focus()">
       <input class="tag-input-inner" id="form-tag-input" placeholder="escreva e pressione Enter..."/>
     </div>
     <p class="hint">Ou clique nas sugestões abaixo</p>
@@ -231,9 +234,7 @@ var PRESETS = ['ficção','não ficção','poesia','conto','crônica','romance']
 
 // FIRESTORE
 col.orderBy('createdAt','desc').onSnapshot(function(snap) {
-  books = snap.docs.map(function(d) {
-    return Object.assign({ id: d.id }, d.data());
-  });
+  books = snap.docs.map(function(d) { return Object.assign({ id: d.id }, d.data()); });
   setSyncOk();
   buildTagCloud();
   renderList();
@@ -243,13 +244,8 @@ col.orderBy('createdAt','desc').onSnapshot(function(snap) {
   setSyncErr();
 });
 
-function addBook(data) {
-  data.createdAt = Date.now();
-  return col.add(data);
-}
-function removeBook(id) {
-  return col.doc(id).delete();
-}
+function addBook(data) { data.createdAt = Date.now(); return col.add(data); }
+function removeBook(id) { return col.doc(id).delete(); }
 
 // SYNC
 function setSyncOk()      { setSync('ok',   'sincronizado'); }
@@ -260,11 +256,7 @@ function setSync(cls, txt) {
   document.getElementById('sync-label').textContent = txt;
 }
 
-// TAG INPUT
-function focusTagInput() {
-  document.getElementById('form-tag-input').focus();
-}
-
+// TAG INPUT IN FORM
 document.addEventListener('DOMContentLoaded', function() {
   var input = document.getElementById('form-tag-input');
   input.addEventListener('keydown', function(e) {
@@ -282,11 +274,11 @@ document.addEventListener('DOMContentLoaded', function() {
 });
 
 function addTagPill(tag) {
+  tag = tag.trim();
+  if (!tag) return;
   var wrap = document.getElementById('form-tags-wrap');
   var input = document.getElementById('form-tag-input');
-  var already = Array.from(wrap.querySelectorAll('.tag-pill')).some(function(p) {
-    return p.dataset.tag === tag;
-  });
+  var already = Array.from(wrap.querySelectorAll('.tag-pill')).some(function(p) { return p.dataset.tag === tag; });
   if (already) return;
   var pill = document.createElement('span');
   pill.className = 'tag-pill';
@@ -295,15 +287,13 @@ function addTagPill(tag) {
   btn.type = 'button';
   btn.innerHTML = '&times;';
   btn.onclick = function() { pill.remove(); };
-  pill.appendChild(document.createTextNode(tag + ' '));
+  pill.appendChild(document.createTextNode(tag + '\u00a0'));
   pill.appendChild(btn);
   wrap.insertBefore(pill, input);
 }
 
 function getFormTags() {
-  return Array.from(document.querySelectorAll('#form-tags-wrap .tag-pill')).map(function(p) {
-    return p.dataset.tag;
-  });
+  return Array.from(document.querySelectorAll('#form-tags-wrap .tag-pill')).map(function(p) { return p.dataset.tag; });
 }
 
 function clearFormTags() {
@@ -346,25 +336,25 @@ function saveBook() {
   }).catch(function() {
     showMsg('form-msg', 'Erro ao salvar. Tente novamente.', 'error');
     setSyncErr();
-  }).finally(function() {
-    btn.disabled = false;
-  });
+  }).finally(function() { btn.disabled = false; });
 }
 
 // TAG CLOUD / FILTER
+function getAllTags() {
+  var set = {};
+  books.forEach(function(b) { (b.tags || []).forEach(function(t) { set[t] = true; }); });
+  return Object.keys(set).sort();
+}
+
 function buildTagCloud() {
   var allTags = getAllTags();
   var cloud = document.getElementById('tag-cloud');
   cloud.innerHTML = '';
-
   if (!allTags.length) {
     cloud.innerHTML = '<span class="tag-cloud-empty">Nenhuma tag cadastrada ainda.</span>';
     return;
   }
-
-  // remove activeTags que sumiram
   activeTags = activeTags.filter(function(t) { return allTags.indexOf(t) >= 0; });
-
   allTags.forEach(function(t) {
     var btn = document.createElement('button');
     btn.className = 'tag-cloud-item' + (activeTags.indexOf(t) >= 0 ? ' active' : '');
@@ -372,14 +362,12 @@ function buildTagCloud() {
     btn.onclick = function() { toggleTagFilter(t); };
     cloud.appendChild(btn);
   });
-
   updateClearBtn();
 }
 
 function toggleTagFilter(tag) {
   var i = activeTags.indexOf(tag);
-  if (i >= 0) activeTags.splice(i, 1);
-  else activeTags.push(tag);
+  if (i >= 0) activeTags.splice(i, 1); else activeTags.push(tag);
   buildTagCloud();
   renderList();
   updateStats();
@@ -401,9 +389,7 @@ function updateClearBtn() {
 function renderActiveFilters() {
   var el = document.getElementById('active-filters');
   if (!activeTags.length) { el.innerHTML = ''; return; }
-  el.innerHTML = 'Filtrando por: ' + activeTags.map(function(t) {
-    return '<b>' + esc(t) + '</b>';
-  }).join(' + ');
+  el.innerHTML = 'Filtrando por: ' + activeTags.map(function(t) { return '<b>' + esc(t) + '</b>'; }).join(' + ');
 }
 
 // LIST
@@ -412,23 +398,16 @@ function renderList() {
   var filtered = books.filter(function(b) {
     var text = [b.title, b.author, b.publisher, b.lang].join(' ').toLowerCase();
     var matchQ = !q || text.indexOf(q) >= 0;
-    var matchT = activeTags.every(function(t) {
-      return (b.tags || []).indexOf(t) >= 0;
-    });
+    var matchT = activeTags.every(function(t) { return (b.tags || []).indexOf(t) >= 0; });
     return matchQ && matchT;
   });
-
   document.getElementById('s-showing').textContent = filtered.length;
   var list = document.getElementById('book-list');
-
   if (!filtered.length) {
-    var msg = books.length
-      ? 'Nenhum livro encontrado para esta busca.'
-      : 'Sua biblioteca está vazia. Adicione o primeiro volume!';
+    var msg = books.length ? 'Nenhum livro encontrado para esta busca.' : 'Sua biblioteca está vazia. Adicione o primeiro volume!';
     list.innerHTML = '<div class="empty"><div class="empty-icon">&#128214;</div><p>' + msg + '</p></div>';
     return;
   }
-
   list.innerHTML = filtered.map(function(b) {
     var meta = [b.author, b.publisher, b.lang].filter(Boolean).join(' · ');
     var tagHtml = (b.tags || []).map(function(t) {
@@ -441,7 +420,7 @@ function renderList() {
         (meta ? '<div class="book-meta">' + esc(meta) + '</div>' : '') +
         (tagHtml ? '<div class="book-tags">' + tagHtml + '</div>' : '') +
       '</div>' +
-      '<div><button class="btn-sm del" onclick="deleteBook(\'' + b.id + '\')">Remover</button></div>' +
+      '<div style="display:flex;gap:4px"><button class="btn-sm" onclick="openEditModal(\'' + b.id + '\')">Editar</button><button class="btn-sm del" onclick="deleteBook(\'' + b.id + '\')">Remover</button></div>' +
     '</div>';
   }).join('');
 }
@@ -457,21 +436,19 @@ function updateStats() {
   document.getElementById('s-tags').textContent  = allTags.length;
 }
 
-function getAllTags() {
-  var set = {};
-  books.forEach(function(b) {
-    (b.tags || []).forEach(function(t) { set[t] = true; });
-  });
-  return Object.keys(set).sort();
+// SPLIT TAGS — aceita vírgula ou ponto e vírgula como separador
+function splitTags(raw) {
+  if (!raw) return [];
+  return raw.split(/[,;]/).map(function(t) { return t.trim(); }).filter(Boolean);
 }
 
 // EXPORT
 function exportCSV() {
   if (!books.length) { alert('Nenhum livro para exportar.'); return; }
   var bom = '\uFEFF';
-  var cols = ['Título','Autoria','Editora','Idioma','Tags'];
+  var cols = ['Título','Autor','Tags','Editora'];
   var rows = books.map(function(b) {
-    return [b.title, b.author, b.publisher, b.lang, (b.tags || []).join('; ')]
+    return [b.title, b.author, (b.tags || []).join(', '), b.publisher]
       .map(function(v) { return '"' + String(v || '').replace(/"/g, '""') + '"'; });
   });
   var csv = bom + [cols.map(function(h) { return '"' + h + '"'; }).join(',')]
@@ -500,7 +477,7 @@ function parseAndPreview(text) {
   var header = parseCSVLine(lines[0]).map(function(h) { return h.toLowerCase().trim(); });
   var idx = {
     title:     findCol(header, ['título','titulo','title']),
-    author:    findCol(header, ['autoria','autor','author']),
+    author:    findCol(header, ['autor','autoria','author']),
     publisher: findCol(header, ['editora','publisher']),
     lang:      findCol(header, ['idioma','lang']),
     tags:      findCol(header, ['tags'])
@@ -516,11 +493,13 @@ function parseAndPreview(text) {
 
   for (var i = 1; i < lines.length; i++) {
     var cols = parseCSVLine(lines[i]);
-    var get = function(k) { return idx[k] >= 0 ? (cols[idx[k]] || '').trim() : ''; };
-    var title  = get('title');
-    var author = get('author');
-    var tagsRaw = get('tags');
-    var tags = tagsRaw ? tagsRaw.split(';').map(function(t) { return t.trim(); }).filter(Boolean) : [];
+    var title     = idx.title     >= 0 ? (cols[idx.title]     || '').trim() : '';
+    var author    = idx.author    >= 0 ? (cols[idx.author]    || '').trim() : '';
+    var publisher = idx.publisher >= 0 ? (cols[idx.publisher] || '').trim() : '';
+    var lang      = idx.lang      >= 0 ? (cols[idx.lang]      || '').trim() : '';
+    var tagsRaw   = idx.tags      >= 0 ? (cols[idx.tags]      || '').trim() : '';
+    // aceita vírgula ou ponto e vírgula como separador de tags
+    var tags = splitTags(tagsRaw);
 
     var status, cls;
     if (!title) {
@@ -529,13 +508,13 @@ function parseAndPreview(text) {
       status = 'Duplicado'; cls = 'dup'; nDup++;
     } else {
       status = 'Novo'; cls = ''; nNew++;
-      importQueue.push({ title: title, author: author, publisher: get('publisher'), lang: get('lang'), tags: tags });
+      importQueue.push({ title: title, author: author, publisher: publisher, lang: lang, tags: tags });
     }
 
     var tr = document.createElement('tr');
     if (cls) tr.className = cls;
     tr.innerHTML =
-      '<td title="' + esc(title) + '">' + esc(title || '—') + '</td>' +
+      '<td title="' + esc(title)  + '">' + esc(title  || '—') + '</td>' +
       '<td title="' + esc(author) + '">' + esc(author || '—') + '</td>' +
       '<td>' + (tags.map(function(t) { return '<span class="book-tag">' + esc(t) + '</span>'; }).join(' ') || '—') + '</td>' +
       '<td>' + status + '</td>';
@@ -553,13 +532,9 @@ function parseAndPreview(text) {
 function confirmImport() {
   if (!importQueue.length) return;
   var btn = document.getElementById('import-confirm-btn');
-  btn.disabled = true;
-  btn.textContent = 'Salvando...';
-  setSyncLoading();
+  btn.disabled = true; btn.textContent = 'Salvando...'; setSyncLoading();
   var chain = Promise.resolve();
-  importQueue.forEach(function(book) {
-    chain = chain.then(function() { return addBook(book); });
-  });
+  importQueue.forEach(function(book) { chain = chain.then(function() { return addBook(book); }); });
   chain.then(function() {
     closeImportModal();
   }).catch(function() {
@@ -600,6 +575,100 @@ function parseCSVLine(line) {
   return result;
 }
 
+
+// EDIT MODAL
+var editingId = null;
+
+function openEditModal(id) {
+  var book = books.find(function(b) { return b.id === id; });
+  if (!book) return;
+  editingId = id;
+  document.getElementById('e-title').value     = book.title     || '';
+  document.getElementById('e-author').value    = book.author    || '';
+  document.getElementById('e-publisher').value = book.publisher || '';
+  document.getElementById('e-lang').value      = book.lang      || '';
+  // clear and repopulate edit tags
+  var wrap = document.getElementById('edit-tags-wrap');
+  var input = document.getElementById('edit-tag-input');
+  wrap.querySelectorAll('.tag-pill').forEach(function(p) { p.remove(); });
+  input.value = '';
+  (book.tags || []).forEach(function(t) { addEditTagPill(t); });
+  // build edit presets
+  var c = document.getElementById('edit-presets');
+  c.innerHTML = '';
+  PRESETS.forEach(function(t) {
+    var b = document.createElement('button');
+    b.className = 'preset-tag'; b.textContent = t;
+    b.onclick = function() { addEditTagPill(t); };
+    c.appendChild(b);
+  });
+  showMsg('edit-msg', '', '');
+  document.getElementById('edit-modal').classList.add('open');
+}
+
+function closeEditModal() {
+  document.getElementById('edit-modal').classList.remove('open');
+  editingId = null;
+}
+
+function addEditTagPill(tag) {
+  tag = tag.trim();
+  if (!tag) return;
+  var wrap = document.getElementById('edit-tags-wrap');
+  var input = document.getElementById('edit-tag-input');
+  var already = Array.from(wrap.querySelectorAll('.tag-pill')).some(function(p) { return p.dataset.tag === tag; });
+  if (already) return;
+  var pill = document.createElement('span');
+  pill.className = 'tag-pill';
+  pill.dataset.tag = tag;
+  var btn = document.createElement('button');
+  btn.type = 'button'; btn.innerHTML = '&times;';
+  btn.onclick = function() { pill.remove(); };
+  pill.appendChild(document.createTextNode(tag + '\u00a0'));
+  pill.appendChild(btn);
+  wrap.insertBefore(pill, input);
+}
+
+function getEditTags() {
+  return Array.from(document.querySelectorAll('#edit-tags-wrap .tag-pill')).map(function(p) { return p.dataset.tag; });
+}
+
+function saveEdit() {
+  if (!editingId) return;
+  var title = document.getElementById('e-title').value.trim();
+  if (!title) { showMsg('edit-msg', 'O título é obrigatório.', 'error'); return; }
+  var btn = document.getElementById('edit-confirm-btn');
+  btn.disabled = true; setSyncLoading();
+  col.doc(editingId).update({
+    title:     title,
+    author:    document.getElementById('e-author').value.trim(),
+    publisher: document.getElementById('e-publisher').value.trim(),
+    lang:      document.getElementById('e-lang').value.trim(),
+    tags:      getEditTags()
+  }).then(function() {
+    closeEditModal();
+  }).catch(function() {
+    showMsg('edit-msg', 'Erro ao salvar. Tente novamente.', 'error');
+    setSyncErr();
+  }).finally(function() { btn.disabled = false; });
+}
+
+// EDIT TAG INPUT KEYDOWN
+document.addEventListener('DOMContentLoaded', function() {
+  var editInput = document.getElementById('edit-tag-input');
+  editInput.addEventListener('keydown', function(e) {
+    if (e.key === 'Enter' || e.key === ',') {
+      e.preventDefault();
+      var v = editInput.value.trim().replace(/,/g, '');
+      if (v) addEditTagPill(v);
+      editInput.value = '';
+    } else if (e.key === 'Backspace' && !editInput.value) {
+      var pills = document.querySelectorAll('#edit-tags-wrap .tag-pill');
+      if (pills.length) pills[pills.length - 1].remove();
+    }
+  });
+});
+
 function showMsg(id, text, type) {
   var el = document.getElementById(id);
   el.textContent = text;
@@ -609,12 +678,37 @@ function showMsg(id, text, type) {
 
 function esc(s) {
   return String(s || '')
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#39;');
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 }
 </script>
+
+<!-- EDIT MODAL -->
+<div class="modal-overlay" id="edit-modal">
+  <div class="modal">
+    <h2>Editar livro</h2>
+    <div class="edit-modal-body">
+      <label>Título *</label>
+      <input type="text" id="e-title" placeholder="Ex: Dom Quixote"/>
+      <label>Autoria</label>
+      <input type="text" id="e-author" placeholder="Ex: Miguel de Cervantes"/>
+      <label>Editora</label>
+      <input type="text" id="e-publisher" placeholder="Ex: Companhia das Letras"/>
+      <label>Idioma</label>
+      <input type="text" id="e-lang" placeholder="Ex: Português"/>
+      <label>Tags</label>
+      <div class="tags-wrap" id="edit-tags-wrap" onclick="document.getElementById('edit-tag-input').focus()">
+        <input class="tag-input-inner" id="edit-tag-input" placeholder="escreva e pressione Enter..."/>
+      </div>
+      <p class="hint">Ou clique nas sugestões abaixo</p>
+      <div class="preset-tags" id="edit-presets"></div>
+    </div>
+    <div id="edit-msg" class="msg"></div>
+    <div class="modal-actions">
+      <button class="btn-cancel" onclick="closeEditModal()">Cancelar</button>
+      <button class="btn-confirm" id="edit-confirm-btn" onclick="saveEdit()">Salvar alterações</button>
+    </div>
+  </div>
+</div>
 </body>
 </html>
